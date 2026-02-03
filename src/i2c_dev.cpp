@@ -1,6 +1,6 @@
 /**
- * @file i2c_device.hpp
- * @brief Abstract base class for I2C sensor drivers
+ * @file i2c_device.cpp
+ * @brief Abstract base class for I2C devices
  * */
 
 /* Includes ------------------------------------------------------------------*/
