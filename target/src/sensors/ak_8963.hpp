@@ -9,7 +9,7 @@
 #pragma once
 
 /* Includes ------------------------------------------------------------------*/
-#include "i2c_dev.hpp"
+#include "../hal/i2c_dev.hpp"
 #include <array>
 
 namespace robotics {
