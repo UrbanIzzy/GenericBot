@@ -38,7 +38,7 @@ class I2CBus {
         bool isOpen() const { return _fd >= 0; }
 
         int getBusNum() const { return _bus_num; }
-        I2CBusState getState() const;
+        const I2CBusState& getState() const;
         void resetState();
         std::string getLastError() const { return _last_error;}
 
@@ -59,14 +59,15 @@ class I2CBus {
     private:
         int _fd;
         int _bus_num;
+        uint8_t _curr_addr;
+        bool _addr_set;
+        
         std::string _dev_path;
         std::string _last_error;
 
         I2CBusConfig _config;
         I2CBusState _state;
 
-        bool _addr_set;
-        uint8_t _curr_addr;
 
         mutable std::mutex _bus_mutex;
 

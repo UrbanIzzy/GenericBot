@@ -37,7 +37,7 @@ I2CBus::I2CBus()
     , _curr_addr(0xFF)
     , _addr_set(false)
     {
-        std::memset(&_state, 0, sizeof(_state));
+        std::memset((void*)&_state, 0, sizeof(_state));
     }
 
 I2CBus::I2CBus(int bus_num)
@@ -53,7 +53,7 @@ bool I2CBus::open(int bus_num, const I2CBusConfig& config){
 
     auto it = s_fd_map.find(bus_num); 
     if(it != s_fd_map.end()){
-        _fd - it->second;
+        _fd = it->second;
         _bus_num = bus_num;
         _dev_path = "/dev/i2c-" + std::to_string(bus_num);
         _config = config;
@@ -128,7 +128,7 @@ void I2CBus::close(){
     _bus_num = -1;
 }
 
-I2CBusState I2CBus::getState() const {
+const I2CBusState& I2CBus::getState() const {
     std::lock_guard<std::mutex> lock(_bus_mutex);
     return _state; 
 }
@@ -136,7 +136,7 @@ I2CBusState I2CBus::getState() const {
 void I2CBus::resetState(){
     std::lock_guard<std::mutex> lock(_bus_mutex);
     
-    std::memset(&_state, 0, sizeof(_state));
+    std::memset((void*)&_state, 0, sizeof(_state));
 }
 
 bool I2CBus::setSlaveAddr(uint8_t addr){

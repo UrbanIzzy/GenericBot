@@ -9,7 +9,7 @@
 #pragma once
 
 /* Includes ------------------------------------------------------------------*/
-#include "i2c_dev.hpp"
+#include "../hal/i2c_dev.hpp"
 #include <array>
 
 namespace robotics {
@@ -72,6 +72,8 @@ public:
 
     bool calibrateGyro(int sample_num = 1000);
     bool calibrateAccel(int sample_num = 1000);
+    
+    bool configSensor();
 
     void getGyroBais(float& x, float& y, float& z) const {
       x = _gyro_bias[0];
@@ -85,10 +87,19 @@ public:
       _gyro_bias[2] = z;
     }
 
+    bool setConfig(const MPU6050Config& config){
+      _config = config;
+      if(!configSensor())
+        return false;
+      calcScaleFactors();
+      return true;  
+    }
+
     bool reset();
     bool selfTest();
 
     const MPU6050Config& getConfig() const { return _config; }
+    MPU6050Config& getConfig() { return _config; }
 
   private:
     MPU6050Config _config;
@@ -113,7 +124,6 @@ public:
     static constexpr uint8_t I_AM_MPU6050 = 0x68;
 
     void calcScaleFactors();
-    bool configSensor();
   };
 
 } // namespace sensor

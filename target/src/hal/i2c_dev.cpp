@@ -119,7 +119,7 @@ bool I2CDev::readInt16(uint8_t reg, int16_t &data){
     return true;
 }
 
-bool I2CDev::readInt16Le(uint8_t reg, int16_t data){
+bool I2CDev::readInt16Le(uint8_t reg, int16_t &data){
     uint16_t udata;
     if(!readWordLe(reg, udata)){
         return false;
@@ -134,7 +134,7 @@ bool I2CDev::ping(){
     }
 
     uint8_t dummy;
-    if(readReg(0x00, dummy) >= 0){
+    if(readData(&dummy, 1)){
         return true;
     }
     return errno != ENXIO;

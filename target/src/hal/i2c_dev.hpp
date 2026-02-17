@@ -38,7 +38,7 @@ class I2CDev : public I2CBus{
         bool writeWordLe(uint8_t reg, uint16_t data);
 
         bool readInt16(uint8_t reg, int16_t &data);
-        bool readInt16Le(uint8_t reg, int16_t data);
+        bool readInt16Le(uint8_t reg, int16_t &data);
 
         bool ping();
         bool verifyDeviceID(uint8_t reg, uint8_t expected_id);
