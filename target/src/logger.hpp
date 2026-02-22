@@ -6,17 +6,19 @@
   * @brief   Lightweight thread-safe logger
   ******************************************************************************
 */
+
+
 #pragma once
 
 #include <string>
 #include <fstream>
 #include <mutex>
 #include <chrono>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
+#include <thread>
+#include <queue>
+#include <condition_variable>
 #include <cstdarg>
-#include <iostream>
+#include <atomic>
 
 namespace robotics {
 
@@ -37,153 +39,88 @@ namespace Color {
     constexpr const char* MAGENTA = "\033[1;35m";
 }
 
+struct LogMessage {
+    uint64_t timestamp_us;
+    LogLevel level;
+    std::string module;
+    std::string message;
+    
+    size_t estimateSize() const {
+        return sizeof(timestamp_us) + sizeof(level) + module.size() + message.size() + 32; // 32 bytes overhead
+    }
+};
+
 class Logger {
     public:
         static void init(
-            const std::string& logFilePath = "",
-            LogLevel consolLevel = LogLevel::INFO,
-            LogLevel fileLevel = LogLevel::DEBUG) {
-                auto& instance = getInstance();
-                std::lock_guard<std::mutex> lock(instance._mutex);
-                
-                instance._consoleLevel = consolLevel;
-                instance._fileLevel = fileLevel;
-                if(!logFilePath.empty() && !instance._logFile.is_open()) {
-                    instance._logFile.open(logFilePath, std::ios::app);
-                    if(!instance._logFile.is_open()){
-                        std::cerr << "Logger: Failed to open" << logFilePath << std::endl;
-                    }
-                }
-        }
-        
-        static void shutdown(){
-            auto& instance = getInstance();
-            std::lock_guard<std::mutex> lock(instance._mutex);
-            
-            if(instance._logFile.is_open())
-                instance._logFile.close();
-        }
+            const std::string& file_name,
+            LogLevel console_level = LogLevel::INFO,
+            LogLevel file_level = LogLevel::DEBUG,
+            size_t queue_capacity = 2024); // Default 2MB queue capacity
 
-        static void log(LogLevel level, const char* module,  const char* format, ...){
-            auto& instance = getInstance();
+        static void shutdown();
 
-            if(level < instance._consoleLevel && level < instance._fileLevel){
-                return;
-            }
-            char buffer[2048];
-            va_list args;
-            va_start(args, format);
-            vsnprintf(buffer, sizeof(buffer), format, args);
-            va_end(args);
-        
-            instance.logMessage(level, module, buffer);
-        }
+        static void log(LogLevel level, const char* module, const char* fmt, ...);
 
-        static Logger& getInstance(){
-            static Logger instance;
-            return instance;
-        }
+        struct Statistics {
+            uint64_t total_messages;
+            uint64_t dropped_messages;
+            size_t queue_size;
+            size_t queue_capacity;
+            size_t current_queue_memory;
+        };
 
-        void setConsoleLevel(LogLevel level){
-            std::lock_guard<std::mutex> lock(_mutex);
-            _consoleLevel = level;
-        }
-
-        void setFileLevel(LogLevel level){
-            std::lock_guard<std::mutex> lock(_mutex);
-            _fileLevel = level;
-        }
+        static Statistics getStatistics();
 
     private:
+        Logger() = default;
+        ~Logger() = default;
+
+        static Logger& getInstance();
+        void threadFunc();
+        static std::string extructModuleName(const char* module);
+        static std::string formatTimestamp(uint64_t timestamp_us);
+        static const char* getLevelString(LogLevel level);
+        static const char* getLevelColor(LogLevel level);
+
+        void writeMessage(const LogMessage& msg);
+
+        std::string _file_name;
         LogLevel _consoleLevel;
         LogLevel _fileLevel;
-        std::ofstream _logFile;
-        std::mutex _mutex;
+        size_t _queue_capacity;
 
-        Logger()
-            : _consoleLevel(LogLevel::INFO)
-            , _fileLevel(LogLevel::DEBUG) {}
+        std::queue<LogMessage> _msg_queue;
+        std::mutex _queue_mutex;
+        std::condition_variable _queue_cv;
+        size_t _current_queue_memory;
+        
+        std::unique_ptr<std::thread> _logger_thread;
+        std::atomic<bool> _running;
 
-        ~Logger() {
-            if(_logFile.is_open()){
-                _logFile.close();
-            }
-        }
+        std::ofstream _log_file;
 
-        Logger(const Logger&) = delete;
-        Logger& operator=(const Logger&) = delete;
+        std::atomic<uint64_t> _total_messages;
+        std::atomic<uint64_t> _dropped_messages;
 
-        std::string formatTimestamp() const {
-            auto now = std::chrono::system_clock::now();
-            auto time_t = std::chrono::system_clock::to_time_t(now);
-            auto us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
-
-            std::tm tm;
-            localtime_r(&time_t, &tm);
-
-            std::ostringstream oss;
-            oss << std::put_time(&tm , "%Y-%m-%d %H:%M:%S") << "," << std::setfill('0') << std::setw(6) << us.count();
-
-            return oss.str();
-        }
-
-        const char* getLevelString(LogLevel level) const {
-            switch(level){
-                    case LogLevel::DEBUG: return "DEBUG";
-                    case LogLevel::INFO:  return "-INFO";
-                    case LogLevel::WARN:  return "WARNN";
-                    case LogLevel::ERROR: return "ERROR";
-                    case LogLevel::FATAL: return "FATAL";
-                    default: return "UNKNOWN";
-            }
-        }
-
-        const char* getLevelColor(LogLevel level) const {
-            switch(level){
-                    case LogLevel::DEBUG: return Color::CYAN;
-                    case LogLevel::INFO: return Color::GREEN;
-                    case LogLevel::WARN: return Color::YELLOW;
-                    case LogLevel::ERROR: return Color::RED;
-                    case LogLevel::FATAL: return Color::MAGENTA;
-                    default: return Color::RESET;
-            }
-        }
-
-        void logMessage(LogLevel level, const char* module, const char* message){
-            std::lock_guard<std::mutex> lock(_mutex);
-
-            std::ostringstream oss;
-            oss << formatTimestamp() << " " 
-                << "[" << getLevelString(level) << "]"
-                << "[" << std::setw(15) << std::left << module << "]"
-                << message;
-
-            std::string formatted = oss.str();
-            
-            if(level >= _fileLevel){
-                std::cout << getLevelColor(level) << formatted << Color::RESET << std::endl;
-            }
-
-            if(level >= _fileLevel && _logFile.is_open()) {
-                _logFile << formatted << std::endl;
-                _logFile.flush();
-            }
-        }
+        static std::atomic<bool> _initialized;
 };
 
+
+
 #define LOG_DEBUG(module, ...) \
-    robotics::Logger::log(robotics::LogLevel::DEBUG, module, __VA_ARGS__)
+    robotics::Logger::log(robotics::LogLevel::DEBUG, __PRETTY_FUNCTION__, module, ##__VA_ARGS__)
 
 #define LOG_INFO(module, ...) \
-    robotics::Logger::log(robotics::LogLevel::INFO, module, __VA_ARGS__)
+    robotics::Logger::log(robotics::LogLevel::INFO, __PRETTY_FUNCTION__, module, ##__VA_ARGS__)
 
 #define LOG_WARN(module, ...) \
-    robotics::Logger::log(robotics::LogLevel::WARN, module, __VA_ARGS__)
+    robotics::Logger::log(robotics::LogLevel::WARN, __PRETTY_FUNCTION__, module, ##__VA_ARGS__)
 
 #define LOG_ERROR(module, ...) \
-    robotics::Logger::log(robotics::LogLevel::ERROR, module, __VA_ARGS__)
+    robotics::Logger::log(robotics::LogLevel::ERROR, __PRETTY_FUNCTION__, module, ##__VA_ARGS__)
 
 #define LOG_FATAL(module, ...) \
-    robotics::Logger::log(robotics::LogLevel::FATAL, module, __VA_ARGS__)
+    robotics::Logger::log(robotics::LogLevel::FATAL, __PRETTY_FUNCTION__, module, ##__VA_ARGS__)
 
-} // namespace robotics
+}
