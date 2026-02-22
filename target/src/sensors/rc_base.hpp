@@ -54,7 +54,7 @@ struct RCData {
     }
 };
 
-struct RCStat {
+struct RCStatistics {
     uint64_t total_packets = 0;
     uint64_t valid_packets = 0;
     uint64_t invalid_packets = 0;
@@ -111,20 +111,24 @@ class RCBase {
             return _last_error;
         }
 
-        RCStat getState() const {
+        RCStatistics getStatistics() const {
             return _stat;
         }
 
-        void resetState() {
-            _stat = RCStat();
+        void resetStatistic() {
+            _stat = RCStatistics();
         }
 
+        std::string getDevicePath() const {
+            return _dev_path;
+        }   
+        
     protected:
         std::unique_ptr<hal::UARTDev> _uart_dev;
         std::string _dev_path;
         std::chrono::steady_clock::time_point _last_update_time;
         std::string _last_error;
-        RCStat _stat;
+        RCStatistics _stat;
 
         void updateStatsValid(){
             _stat.total_packets++;
